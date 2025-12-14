@@ -1,127 +1,157 @@
-function num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+// rankingService.js
+import fs from "node:fs";
+import path from "node:path";
+import { apiFootballGet } from "./apiFootballClient.js";
+import { computeScore } from "./scoring.js";
+
+const n = (v) => Number(v ?? 0) || 0;
+
+// Mapping optionnel API-Football playerId -> FotMob playerId
+// Exemple contenu: { "276": 12345, "874": 998877 }
+const FOTMOB_MAP_PATH = path.join(process.cwd(), "fotmobPlayerMap.json");
+const fotmobMap = fs.existsSync(FOTMOB_MAP_PATH)
+  ? JSON.parse(fs.readFileSync(FOTMOB_MAP_PATH, "utf-8"))
+  : {};
+
+async function fetchAllPlayersSeasonStats({ league, season }) {
+  const all = [];
+  let page = 1;
+  let totalPages = 1;
+
+  while (page <= totalPages) {
+    const data = await apiFootballGet(`/players?league=${league}&season=${season}&page=${page}`);
+    const resp = data?.response ?? [];
+    all.push(...resp);
+
+    totalPages = n(data?.paging?.total) || page;
+    page += 1;
+  }
+
+  return all;
 }
 
-function toRoleCode(apiPosition) {
-  const p = String(apiPosition || "").toLowerCase();
-  if (p.includes("attacker") || p.includes("forward") || p.includes("striker")) return "ATT";
-  if (p.includes("midfielder")) return "MID";
-  if (p.includes("defender")) return "DEF";
-  if (p.includes("goalkeeper")) return "GK";
-  return "UNK";
+function mapApiFootballSeasonRow(row) {
+  const player = row?.player ?? {};
+  const stat0 = row?.statistics?.[0] ?? {};
+
+  // API-FOOTBALL fields (souvent null -> ?? 0)
+  const goals = n(stat0?.goals?.total);
+  const assists = n(stat0?.goals?.assists);
+  const shots = n(stat0?.shots?.total);
+
+  // chanceCreated = passes.key (comme tu veux)
+  const chanceCreated = n(stat0?.passes?.key);
+
+  const successfulDribble = n(stat0?.dribbles?.success);
+  const interceptions = n(stat0?.tackles?.interceptions);
+  const duelsWon = n(stat0?.duels?.won);
+
+  const yellowCards = n(stat0?.cards?.yellow);
+  const redCards = n(stat0?.cards?.red);
+
+  const minutes = n(stat0?.games?.minutes);
+  const team = stat0?.team ?? {};
+  const league = stat0?.league ?? {};
+
+  // Par défaut à 0 (tu l’as demandé) — enrichissement FotMob plus tard
+  const bigChanceCreated = 0;
+  const accurateCross = 0;
+  const accurateLongBall = 0;
+  const recoveries = 0;
+  const dispossessed = 0;
+
+  const stats = {
+    goals,
+    assists,
+    shots,
+    chanceCreated,
+
+    successfulDribble,
+    interceptions,
+    duelsWon,
+
+    yellowCards,
+    redCards,
+
+    // default 0
+    bigChanceCreated,
+    accurateCross,
+    accurateLongBall,
+    recoveries,
+    dispossessed
+  };
+
+  return {
+    apiFootballPlayerId: player?.id,
+    name: player?.name ?? "Unknown",
+    photo: player?.photo ?? null,
+    age: player?.age ?? null,
+    nationality: player?.nationality ?? null,
+    minutes,
+
+    team: { id: team?.id ?? null, name: team?.name ?? null, logo: team?.logo ?? null },
+    league: { id: league?.id ?? null, name: league?.name ?? null, season: league?.season ?? null, logo: league?.logo ?? null },
+
+    // si tu ajoutes une map, on l’a déjà
+    fotmobPlayerId: fotmobMap[String(player?.id)] ?? null,
+
+    stats,
+    score: computeScore(stats)
+  };
 }
 
-export class RankingService {
-  constructor({ apiClient, cacheTtlMs = 30 * 60 * 1000 }) {
-    this.apiClient = apiClient;
-    this.cacheTtlMs = cacheTtlMs;
-    this.cache = new Map(); // key -> { expiresAt, data }
+// --- Hook FotMob (optionnel, seulement si tu as fotmobPlayerId) ---
+async function enrichTopWithFotmob(rows, { fotmobLeagueId, seasonRange, topN = 50 }) {
+  if (process.env.FOTMOB_ENABLED !== "true") return rows;
+
+  const baseUrl = process.env.FOTMOB_SERVICE_URL ?? "http://localhost:8001";
+
+  // on n’enrichit que le topN pour éviter 1000 calls
+  const sorted = [...rows].sort((a, b) => b.score - a.score);
+  const target = sorted.slice(0, topN);
+
+  await Promise.all(
+    target.map(async (r) => {
+      if (!r.fotmobPlayerId) return;
+
+      const url =
+        `${baseUrl}/player-extras` +
+        `?playerId=${encodeURIComponent(r.fotmobPlayerId)}` +
+        `&leagueId=${encodeURIComponent(fotmobLeagueId)}` +
+        `&season=${encodeURIComponent(seasonRange)}`;
+
+      const res = await fetch(url);
+      if (!res.ok) return;
+
+      const extras = await res.json();
+
+      // protège-toi contre null
+      r.stats.bigChanceCreated = n(extras?.bigChanceCreated);
+      r.stats.recoveries = n(extras?.recoveries);
+      r.stats.accurateLongBall = n(extras?.accurateLongBall);
+
+      // recalcul score
+      r.score = computeScore(r.stats);
+    })
+  );
+
+  // resort après enrich
+  return sorted.sort((a, b) => b.score - a.score);
+}
+
+export async function getSeasonRanking({ league, season, minMinutes = 0, limit = 50 }) {
+  const raw = await fetchAllPlayersSeasonStats({ league, season });
+  let rows = raw.map(mapApiFootballSeasonRow);
+
+  if (minMinutes > 0) rows = rows.filter((r) => r.minutes >= minMinutes);
+
+  // OPTION: FotMob enrichment (si tu as la map + service python)
+  const fotmobLeagueId = process.env.FOTMOB_LEAGUE_ID;     // à set selon compétition
+  const seasonRange = process.env.FOTMOB_SEASON_RANGE;     // ex: "2024/2025"
+  if (fotmobLeagueId && seasonRange) {
+    rows = await enrichTopWithFotmob(rows, { fotmobLeagueId, seasonRange, topN: Math.max(limit, 50) });
   }
 
-  _cacheGet(key) {
-    const hit = this.cache.get(key);
-    if (!hit) return null;
-    if (Date.now() > hit.expiresAt) {
-      this.cache.delete(key);
-      return null;
-    }
-    return hit.data;
-  }
-
-  _cacheSet(key, data) {
-    this.cache.set(key, { expiresAt: Date.now() + this.cacheTtlMs, data });
-  }
-
-  async getRankings({ league, season, position = "ALL", minMinutes = 0, q = "", limit = 20 }) {
-    const cacheKey = `topscorers:${league}:${season}`;
-    let apiData = this._cacheGet(cacheKey);
-    let cached = true;
-
-    if (!apiData) {
-      cached = false;
-      apiData = await this.apiClient.get("/players/topscorers", { league, season });
-      this._cacheSet(cacheKey, apiData);
-    }
-
-    const rawRows = (apiData?.response || []).map((item, idx) => {
-      const player = item?.player || {};
-      const stats0 = item?.statistics?.[0] || {};
-
-      const minutes = num(stats0?.games?.minutes);
-      const apiPos = stats0?.games?.position || "";
-      const role = toRoleCode(apiPos);
-
-      const goals = num(stats0?.goals?.total);
-      const assists = num(stats0?.goals?.assists);
-      const shotsTotal = num(stats0?.shots?.total);
-      const shotsOn = num(stats0?.shots?.on);
-      const yellow = num(stats0?.cards?.yellow);
-      const red = num(stats0?.cards?.red);
-      const rating = stats0?.games?.rating ?? "";
-
-      // Score simple (tu pourras l’améliorer ensuite)
-      const rawScore =
-        goals * 10 +
-        assists * 6 +
-        shotsOn * 0.8 +
-        shotsTotal * 0.2 -
-        yellow * 1.0 -
-        red * 5.0;
-
-      return {
-        _idx: idx,
-        playerId: player?.id ?? null,
-        playerName: player?.name ?? "",
-        age: player?.age ?? null,
-        teamName: stats0?.team?.name ?? "",
-        minutes,
-        role,
-        metrics: { goals, assists, shotsTotal, shotsOn, yellow, red, rating },
-        rawScore,
-      };
-    });
-
-    // Filtres
-    let rows = rawRows;
-
-    const pos = String(position || "ALL").toUpperCase();
-    if (pos !== "ALL") rows = rows.filter(r => r.role === pos);
-
-    const mm = num(minMinutes);
-    if (mm > 0) rows = rows.filter(r => r.minutes >= mm);
-
-    const query = String(q || "").trim().toLowerCase();
-    if (query) rows = rows.filter(r => (r.playerName || "").toLowerCase().includes(query));
-
-    // Normaliser sur 100
-    const maxRaw = Math.max(...rows.map(r => r.rawScore), 1);
-    rows = rows
-      .map(r => ({ ...r, score: Number(((r.rawScore / maxRaw) * 100).toFixed(1)) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, Math.min(num(limit) || 20, 50))
-      .map((r, i) => ({
-        rank: i + 1,
-        playerId: r.playerId,
-        playerName: r.playerName,
-        age: r.age,
-        teamName: r.teamName,
-        minutes: r.minutes,
-        role: r.role,
-        score: r.score,
-        metrics: r.metrics,
-      }));
-
-    return {
-      ok: true,
-      meta: {
-        league: num(league),
-        season: num(season),
-        cached,
-        count: rows.length,
-        fetchedAt: new Date().toISOString(),
-      },
-      rows,
-    };
-  }
+  rows.sort((a, b) => b.score - a.score);
+  return rows.slice(0, limit);
 }

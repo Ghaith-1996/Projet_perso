@@ -1,136 +1,94 @@
-function $(id) { return document.getElementById(id); }
+const els = {
+  league: document.getElementById("league"),
+  season: document.getElementById("season"),
+  position: document.getElementById("position"),
+  minMinutes: document.getElementById("minMinutes"),
+  search: document.getElementById("search"),
+  status: document.getElementById("status"),
+  body: document.getElementById("rankingBody"),
+  refreshBtn: document.getElementById("refreshBtn"),
+};
 
-function formatInt(n) {
-  return new Intl.NumberFormat("fr-CA").format(Number(n || 0));
+function fmt(n) {
+  const x = Number(n ?? 0);
+  return Number.isFinite(x) ? x.toLocaleString("fr-CA") : "0";
 }
 
-function chip(text) {
-  const s = document.createElement("span");
-  s.className = "chip";
-  s.textContent = text;
-  return s;
+function fmtScore(n) {
+  const x = Number(n ?? 0);
+  return Number.isFinite(x) ? x.toFixed(2) : "0.00";
 }
 
-function rowEl(r) {
-  const tr = document.createElement("tr");
+function render(rows) {
+  els.body.innerHTML = "";
 
-  const tdRank = document.createElement("td");
-  tdRank.className = "rank";
-  tdRank.textContent = String(r.rank);
-  tr.appendChild(tdRank);
-
-  const tdPlayer = document.createElement("td");
-  const playerWrap = document.createElement("div");
-  playerWrap.className = "player";
-
-  const avatar = document.createElement("div");
-  avatar.className = "avatar";
-  avatar.textContent = String(r.rank);
-  avatar.setAttribute("aria-hidden", "true");
-
-  const info = document.createElement("div");
-  const name = document.createElement("div");
-  name.className = "player-name";
-  name.textContent = r.playerName || "—";
-
-  const meta = document.createElement("div");
-  meta.className = "player-meta muted";
-  meta.textContent = `${r.role || "UNK"}${r.age ? ` • ${r.age} ans` : ""}`;
-
-  info.appendChild(name);
-  info.appendChild(meta);
-
-  playerWrap.appendChild(avatar);
-  playerWrap.appendChild(info);
-  tdPlayer.appendChild(playerWrap);
-  tr.appendChild(tdPlayer);
-
-  const tdTeam = document.createElement("td");
-  tdTeam.className = "muted";
-  tdTeam.textContent = r.teamName || "—";
-  tr.appendChild(tdTeam);
-
-  const tdMin = document.createElement("td");
-  tdMin.className = "muted";
-  tdMin.textContent = formatInt(r.minutes);
-  tr.appendChild(tdMin);
-
-  const tdScore = document.createElement("td");
-  const scoreWrap = document.createElement("div");
-  scoreWrap.className = "score";
-  const pill = document.createElement("span");
-  pill.className = "pill";
-  pill.textContent = String(r.score ?? "—");
-  const outOf = document.createElement("span");
-  outOf.className = "muted";
-  outOf.textContent = "/ 100";
-  scoreWrap.appendChild(pill);
-  scoreWrap.appendChild(outOf);
-  tdScore.appendChild(scoreWrap);
-  tr.appendChild(tdScore);
-
-  const tdMetrics = document.createElement("td");
-  const chips = document.createElement("div");
-  chips.className = "chips";
-
-  const m = r.metrics || {};
-  chips.appendChild(chip(`Buts: ${m.goals ?? 0}`));
-  chips.appendChild(chip(`Assists: ${m.assists ?? 0}`));
-  chips.appendChild(chip(`Tirs cadrés: ${m.shotsOn ?? 0}`));
-  chips.appendChild(chip(`Jaunes: ${m.yellow ?? 0}`));
-  chips.appendChild(chip(`Rouges: ${m.red ?? 0}`));
-  if (m.rating) chips.appendChild(chip(`Note: ${m.rating}`));
-
-  tdMetrics.appendChild(chips);
-  tr.appendChild(tdMetrics);
-
-  return tr;
+  rows.forEach((r, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="rank">${idx + 1}</td>
+      <td>
+        <div class="player">
+          <div class="avatar" aria-hidden="true">${(idx + 1).toString()}</div>
+          <div>
+            <div class="player-name">${r.name ?? "—"}</div>
+            <div class="player-meta muted">${r.position ?? "—"} • ${r.age ?? "—"} ans</div>
+          </div>
+        </div>
+      </td>
+      <td class="muted">${r.team ?? "—"}</td>
+      <td class="muted">${fmt(r.minutes)}</td>
+      <td>
+        <div class="score">
+          <span class="pill">${fmtScore(r.score)}</span>
+        </div>
+      </td>
+      <td>
+        <div class="chips">
+          <span class="chip">Buts: ${fmt(r.goals)}</span>
+          <span class="chip">Assists: ${fmt(r.assists)}</span>
+          <span class="chip">Key passes: ${fmt(r.chanceCreated)}</span>
+          <span class="chip">Tirs: ${fmt(r.shots)}</span>
+        </div>
+      </td>
+    `;
+    els.body.appendChild(tr);
+  });
 }
 
-async function loadRankings() {
-  const league = $("league")?.value || "39";
-  const season = $("season")?.value || "2021";
-  const position = $("position")?.value || "ALL";
-  const minMinutes = $("minMinutes")?.value || "0";
-  const q = $("search")?.value || "";
+async function refresh() {
+  const league = els.league.value;
+  const season = els.season.value;
+  const position = els.position.value;
+  const minMinutes = els.minMinutes.value;
+  const q = els.search.value.trim();
 
-  const status = $("status");
-  const body = $("rankingBody");
-
-  status.textContent = "Chargement…";
-  body.innerHTML = "";
+  els.status.textContent = "Chargement…";
 
   const url = new URL("/api/rankings", window.location.origin);
   url.searchParams.set("league", league);
   url.searchParams.set("season", season);
   url.searchParams.set("position", position);
   url.searchParams.set("minMinutes", minMinutes);
-  if (q.trim()) url.searchParams.set("q", q.trim());
-  url.searchParams.set("limit", "20");
+  url.searchParams.set("limit", "50");
+  if (q) url.searchParams.set("q", q);
 
-  const res = await fetch(url);
+  const res = await fetch(url.toString());
   const data = await res.json();
 
-  if (!data.ok) {
-    status.textContent = `Erreur API: ${data.error || "inconnue"}`;
+  if (!res.ok) {
+    els.status.textContent = data?.error ? `Erreur: ${data.error}` : "Erreur API";
+    els.body.innerHTML = "";
     return;
   }
 
-  const rows = data.rows || [];
-  if (!rows.length) {
-    status.textContent = "Aucun résultat (change ligue/saison ou baisse minutes minimum).";
-    return;
-  }
-
-  for (const r of rows) body.appendChild(rowEl(r));
-
-  status.textContent = `OK — ${data.meta?.count ?? rows.length} joueurs — cache: ${data.meta?.cached ? "HIT" : "MISS"}`;
+  render(data.rows ?? []);
+  els.status.textContent =
+    `OK — ${data?.meta?.returned ?? 0} joueurs (scan: ${data?.meta?.scannedPlayers ?? 0}) — cache: ${data?.meta?.cachedAt ?? "—"}`;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  $("refreshBtn")?.addEventListener("click", loadRankings);
-  loadRankings().catch((e) => {
-    const status = $("status");
-    if (status) status.textContent = `Erreur: ${e.message}`;
-  });
+els.refreshBtn?.addEventListener("click", refresh);
+
+// Auto-load au démarrage
+refresh().catch((e) => {
+  els.status.textContent = `Erreur: ${String(e?.message ?? e)}`;
 });
