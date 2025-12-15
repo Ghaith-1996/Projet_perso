@@ -1,108 +1,90 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Top Players — Rankings</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-
-  <body>
-    <a class="skip-link" href="#main">Aller au contenu</a>
-
-    <header class="site-header">
-      <div class="container header-row">
-        <div class="brand">
-          <div class="brand-mark" aria-hidden="true">⚽</div>
-          <div class="brand-text">
-            <div class="brand-name">Top Players</div>
-            <div class="brand-sub">Classement basé sur stats + bonus</div>
-          </div>
-        </div>
-
-        <nav class="header-actions" aria-label="Actions">
-          <button class="btn btn-ghost" type="button">Méthodologie</button>
-          <button class="btn btn-primary" type="button">Exporter CSV</button>
-        </nav>
-      </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Top Players - Classement Personnalisé</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>⚽ Top Players - Recherche</h1>
+      <p class="subtitle">Classez les joueurs selon vos propres règles</p>
     </header>
 
-    <main id="main" class="container">
-      <section class="page-head">
-        <h1>Classement des meilleurs joueurs</h1>
-        <p class="muted">
-          Filtre par ligue, saison, poste et minutes. Le score est normalisé sur 100.
-        </p>
-      </section>
+    <nav class="nav-links">
+      <a href="index.html" class="active">Recherche par Ligue</a>
+      <a href="top_players.html">Classement Global (Top 100)</a>
+    </nav>
 
-      <section class="grid">
-        <aside class="card" aria-label="Filtres">
-          <form class="filters" action="#" method="get" onsubmit="return false;">
-            <div class="field">
-              <label for="league">Ligue</label>
-              <select id="league" name="league">
-                <option value="39">Premier League</option>
-                <option value="140">LaLiga</option>
-                <option value="135">Serie A</option>
-                <option value="78">Bundesliga</option>
-                <option value="61">Ligue 1</option>
-              </select>
-            </div>
+    <div class="controls">
+      <div class="control-group">
+        <label for="league">Ligue</label>
+        <select id="league">
+          <option value="39">Premier League</option>
+          <option value="140">La Liga</option>
+          <option value="78">Bundesliga</option>
+          <option value="135">Serie A</option>
+          <option value="61">Ligue 1</option>
+        </select>
+      </div>
 
-            <div class="field">
-              <label for="season">Saison</label>
-              <select id="season" name="season">
-                <option value="2021">2021</option>
-                <option value="2022">2022</option>
-                <option value="2023">2023</option>
-                <option value="2024">2024</option>
-              </select>
-            </div>
+      <div class="control-group">
+        <label for="season">Saison</label>
+        <select id="season">
+          <option value="2024">2024</option>
+          <option value="2023" selected>2023</option>
+          <option value="2022">2022</option>
+          <option value="2021">2021</option>
+        </select>
+      </div>
 
-            <div class="field">
-              <label for="position">Poste</label>
-              <select id="position" name="position">
-                <option value="ALL">Tous</option>
-                <option value="ATT">Attaquant</option>
-                <option value="MID">Milieu</option>
-                <option value="DEF">Défenseur</option>
-                <option value="GK">Gardien</option>
-              </select>
-            </div>
+      <div class="control-group">
+        <label for="position">Position</label>
+        <select id="position">
+          <option value="ALL">Toutes</option>
+          <option value="ATT">Attaquants</option>
+          <option value="MID">Milieux</option>
+          <option value="DEF">Défenseurs</option>
+          <option value="GK">Gardiens</option>
+        </select>
+      </div>
 
-            <div class="field">
-              <label for="minMinutes">Minutes minimum</label>
-              <input id="minMinutes" name="minMinutes" type="number" min="0" step="90" value="900" />
-            </div>
+      <div class="control-group">
+        <label for="minMinutes">Min. Minutes</label>
+        <input type="number" id="minMinutes" value="900" step="100" />
+      </div>
 
-            <div class="actions">
-              <button id="refreshBtn" class="btn btn-primary" type="button">Actualiser</button>
-              <button class="btn btn-ghost" type="reset">Réinitialiser</button>
-            </div>
-          </form>
-        </aside>
+      <div class="control-group">
+        <label for="search">Rechercher</label>
+        <input type="text" id="search" placeholder="Nom du joueur..." />
+      </div>
 
-        <section class="card" aria-label="Classement">
-          <div class="table-wrap">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">Joueur</th>
-                  <th scope="col">Équipe</th>
-                  <th scope="col">Min</th>
-                  <th scope="col">Score</th>
-                  <th scope="col">Métriques clés</th>
-                </tr>
-              </thead>
-              <tbody id="rankingBody"></tbody>
-            </table>
-          </div>
-          <p id="status" class="muted"></p>
-        </section>
-      </section>
-    </main>
+      <button id="refreshBtn" class="btn-primary">Actualiser</button>
+    </div>
 
-    <script src="app.js" defer></script>
-  </body>
+    <div id="status" class="status-bar">Prêt</div>
+
+    <table class="ranking-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Joueur</th>
+          <th>Équipe</th>
+          <th>Minutes</th>
+          <th>Score</th>
+          <th>Détails (Stats)</th>
+        </tr>
+      </thead>
+      <tbody id="rankingBody"></tbody>
+    </table>
+
+    <footer class="footer-meta">
+      <small>Données récupérées: <span id="statCount">—</span> joueurs • Cache: <span id="statCache">—</span></small>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
 </html>

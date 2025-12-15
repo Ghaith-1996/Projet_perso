@@ -52,6 +52,19 @@ app.get("/api/debug/players", async (req, res) => {
   }
 });
 
+// Route spéciale pour le classement mondial
+app.get("/api/global-rankings", async (req, res) => {
+  try {
+    const season = req.query.season || 2023;
+    // Appel de la fonction unique qui gère l'array global
+    const rows = await import("./rankingService.js").then(m => m.getGlobalRankings(season));
+    res.json({ rows });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erreur serveur global" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running: http://localhost:${PORT}`);
 });

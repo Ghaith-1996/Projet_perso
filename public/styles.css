@@ -423,3 +423,34 @@ a { color: inherit; }
   white-space: nowrap;
   border: 0;
 }
+.nav-links {
+  display: flex;
+  justify-content: center; /* Centre les boutons */
+  gap: 15px;               /* Espace entre les boutons */
+  margin-bottom: 30px;     /* Espace sous le menu */
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: #555;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 12px 24px;
+  background-color: #f4f4f4; /* Gris clair par défaut */
+  border-radius: 50px;       /* Bords bien arrondis */
+  transition: all 0.3s ease; /* Animation douce */
+  border: 2px solid transparent;
+}
+
+/* Effet au survol de la souris */
+.nav-links a:hover {
+  background-color: #e0e0e0;
+  transform: translateY(-2px); /* Monte légèrement */
+}
+
+/* Style du bouton actif (page courante) */
+.nav-links a.active {
+  background-color: #007bff; /* Bleu (ou votre couleur principale) */
+  color: white;
+  box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3); /* Ombre portée */
+}

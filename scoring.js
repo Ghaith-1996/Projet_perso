@@ -1,7 +1,7 @@
 //scoring.js
 export const WEIGHTS = {
-  goal: 3,
-  assist: 2,
+  goal: 5,
+  assist: 4,
   shot: 0.2,
   chanceCreated: 0.5, // key passes
 
