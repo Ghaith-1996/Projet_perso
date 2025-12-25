@@ -6,34 +6,33 @@ function render(rows) {
   body.innerHTML = "";
 
   if (!rows || rows.length === 0) {
-    body.innerHTML = `<tr><td colspan="6" style="text-align:center;">Aucune donnée (ou chargement en cours...)</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;">Aucune donnée scrapée (ou chargement...)</td></tr>`;
     return;
   }
 
   rows.forEach((r, idx) => {
     const tr = document.createElement("tr");
+    // On peut ajouter des icônes selon la ligue si on veut
     tr.innerHTML = `
       <td class="rank">${idx + 1}</td>
       <td>
         <div class="player">
           <div class="avatar">${idx + 1}</div>
           <div>
-            <div class="player-name">${r.name}</div>
-            <div class="player-meta muted">${r.position} • ${r.age || "?"} ans</div>
+            <div class="player-name"><b>${r.name}</b></div>
+            <div class="player-meta muted">${r.league}</div>
           </div>
         </div>
       </td>
-      <td>${r.team}<br><small style="color:#888">${r.league || ""}</small></td>
-      <td>
-        <div class="score"><span class="pill">${fmtScore(r.score)}</span></div>
-      </td>
+      <td>${r.team}</td>
+      <td><div class="score"><span class="pill">${fmtScore(r.score)}</span></div></td>
       <td>
         <div class="chips">
           <span class="chip">Buts: ${r.goals}</span>
           <span class="chip">Assists: ${r.assists}</span>
-          <span class="chip">Tirs: ${r.shots}</span>
-          <span class="chip" style="background:#e3f2fd; color:#0d47a1;">Key Passes: ${r.keyPasses}</span>
-          <span class="chip">Dribbles: ${r.dribblesSuccess}</span>
+          <span class="chip">Passes clés: ${r.keyPasses}</span>
+          <span class="chip">Dribbles: ${r.dribblesWon}</span>
+          <span class="chip">Interc: ${r.interceptions}</span>
         </div>
       </td>
     `;
@@ -41,41 +40,73 @@ function render(rows) {
   });
 }
 
-async function loadGlobal(season) {
+async function loadScrapedData() {
   const status = getEl("status");
   const btn = getEl("refreshBtn");
   
-  status.textContent = "Récupération des meilleurs joueurs mondiaux... (cela peut prendre quelques secondes)";
+  status.textContent = "Scraping des données FBref en cours (peut prendre 5-10 secondes)...";
   btn.disabled = true;
   getEl("rankingBody").innerHTML = "";
 
   try {
-    // Appel unique au serveur qui gère le cache et les 5 ligues
-    const res = await fetch(`/api/global-rankings?season=${season}`);
+    const res = await fetch("/api/scraped-rankings");
     const data = await res.json();
 
-    if (data.rows) {
+    if (data.ok && data.rows) {
       render(data.rows);
-      status.textContent = `Top ${data.rows.length} chargé avec succès !`;
+      status.textContent = `Scraping terminé ! ${data.rows.length} joueurs trouvés (>2000 min).`;
     } else {
-      status.textContent = "Erreur de données.";
+      status.textContent = "Erreur lors du scraping.";
     }
   } catch (e) {
     console.error(e);
-    status.textContent = "Erreur de connexion au serveur.";
+    status.textContent = "Erreur serveur.";
   } finally {
     btn.disabled = false;
   }
+
+}
+// ... (le début reste pareil)
+
+async function loadScrapedData() {
+  const status = getEl("status");
+  const btn = getEl("refreshBtn");
+  
+  status.textContent = "Scraping via ScrapingBee en cours (5-10 secondes)...";
+  status.style.color = "blue";
+  if(btn) btn.disabled = true;
+  getEl("rankingBody").innerHTML = "";
+
+  try {
+    const res = await fetch("/api/scraped-rankings");
+    const data = await res.json();
+
+    if (data.ok && data.rows) {
+      render(data.rows);
+      status.textContent = `Succès ! ${data.rows.length} joueurs chargés.`;
+      status.style.color = "green";
+    } else {
+      // AFFICHER LA VRAIE ERREUR ICI
+      console.error("Erreur serveur:", data);
+      status.textContent = `Erreur: ${data.error || "Problème inconnu"}`;
+      status.style.color = "red";
+    }
+  } catch (e) {
+    console.error(e);
+    status.textContent = `Erreur JS: ${e.message}`;
+    status.style.color = "red";
+  } finally {
+    if(btn) btn.disabled = false;
+  }
 }
 
-// Démarrage automatique au chargement de la page
-document.addEventListener("DOMContentLoaded", () => {
-  const defaultSeason = getEl("season").value;
-  loadGlobal(defaultSeason); // <-- Lancement AUTO ici
+// ... (la fin reste pareille)
 
-  // Bouton manuel si on change la saison
-  getEl("refreshBtn").addEventListener("click", () => {
-    const season = getEl("season").value;
-    loadGlobal(season);
-  });
+document.addEventListener("DOMContentLoaded", () => {
+  // Lancer au chargement ou via le bouton
+  const btn = getEl("refreshBtn");
+  if(btn) btn.addEventListener("click", loadScrapedData);
+  
+  // Auto-start
+  loadScrapedData();
 });

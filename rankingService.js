@@ -1,6 +1,19 @@
 import { apiGet } from "./apiFootballClient.js";
 import { scoreFromStats } from "./scoring.js";
+// Dans rankingService.js
+import { mapPythonStatsToScoring, calculateScore } from './scoring.js';
 
+const processPlayers = (playersFromPython) => {
+  return playersFromPython.map(player => {
+    // On adapte les données Python
+    const formattedStats = mapPythonStatsToScoring(player);
+
+    // On calcule le score avec tes WEIGHTS existants
+    const score = calculateScore(formattedStats);
+
+    return { ...player, overallScore: score };
+  });
+};
 const LEAGUE_IDS = [39, 140, 78, 135, 61]; // PL, La Liga, Bundesliga, Serie A, Ligue 1
 let globalCache = { data: [], lastUpdated: 0 }; // Notre "Array" global
 const GLOBAL_CACHE_TTL = 60 * 60 * 1000; // 1 heure de cache pour le global
@@ -28,9 +41,9 @@ function extractStatBlock(stat) {
     goals: toNum(stat?.goals?.total),
     assists: toNum(stat?.goals?.assists),
     shots: toNum(stat?.shots?.total),
-    
+
     // C'est ici qu'on récupère les passes clés de l'API
-    keyPasses: toNum(stat?.passes?.key), 
+    keyPasses: toNum(stat?.passes?.key),
 
     dribblesSuccess: toNum(stat?.dribbles?.success),
     interceptions: toNum(stat?.tackles?.interceptions),
@@ -87,8 +100,8 @@ function aggregatePlayers(apiPlayers, { season }) {
         photo: p.photo ?? null,
         teamNames: new Set(),
         leagueNames: new Set(), // Pour afficher la ligue
-        
-        minutes: 0, goals: 0, assists: 0, shots: 0, 
+
+        minutes: 0, goals: 0, assists: 0, shots: 0,
         keyPasses: 0, // Init
         dribblesSuccess: 0, interceptions: 0, duelsWon: 0, yellow: 0, red: 0,
         positionRaw: null,
@@ -135,7 +148,7 @@ function aggregatePlayers(apiPlayers, { season }) {
       position: normalizePosition(agg.positionRaw),
       score,
       // Nettoyage technique
-      teamNames: undefined, leagueNames: undefined, processedSignatures: undefined 
+      teamNames: undefined, leagueNames: undefined, processedSignatures: undefined
     });
   }
   return rows;
@@ -144,7 +157,7 @@ function aggregatePlayers(apiPlayers, { season }) {
 // Nouvelle fonction pour le "Classement Global"
 export async function getGlobalRankings(season) {
   const now = Date.now();
-  
+
   // Si le cache est valide, on retourne l'array sauvegardé
   if (globalCache.data.length > 0 && (now - globalCache.lastUpdated < GLOBAL_CACHE_TTL)) {
     console.log("Serving Global from CACHE");
@@ -165,7 +178,7 @@ export async function getGlobalRankings(season) {
 
   // Tri global
   aggregated.sort((a, b) => b.score - a.score);
-  
+
   // On garde le Top 200
   const finalRows = aggregated.slice(0, 200);
 
@@ -183,10 +196,10 @@ export async function getRankings({ league, season, minMinutes, limit, q }) {
   // Réutilise fetchLeagueTops mais juste pour une ligue
   const raw = await fetchLeagueTops(league, season);
   let rows = aggregatePlayers(raw, { season });
-  
+
   // Filtre minutes
   rows = rows.filter(p => p.minutes >= (minMinutes || 0));
   rows.sort((a, b) => b.score - a.score);
-  
+
   return { rows: rows.slice(0, limit || 50) };
 }

@@ -1,69 +1,31 @@
 import express from "express";
 import dotenv from "dotenv";
+import { scrapeTop5Leagues } from "./scrapingService.js";
+
 dotenv.config();
-
-import { getRankings } from "./rankingService.js";
-import { apiGet } from "./apiFootballClient.js";
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Static (public/index.html, public/app.js, public/styles.css, ...)
 app.use(express.static("public"));
 
-app.get("/api/rankings", async (req, res) => {
+// Nouvelle route qui utilise le scraping
+app.get("/api/scraped-rankings", async (req, res) => {
   try {
-    const league = req.query.league;
-    const season = req.query.season;
-
-    if (!league || !season) {
-      return res.status(400).json({ error: "Paramètres requis: league, season" });
-    }
-
-    const position = (req.query.position ?? "ALL").toString();
-    const minMinutes = Number(req.query.minMinutes ?? 900);
-    const limit = Number(req.query.limit ?? 50);
-    const q = (req.query.q ?? "").toString().trim();
-
-    const data = await getRankings({ league, season, position, minMinutes, limit, q });
-    res.json(data);
-  } catch (e) {
-    res.status(500).json({ error: String(e?.message ?? e) });
-  }
-});
-
-// Debug endpoint
-app.get("/api/debug/players", async (req, res) => {
-  try {
-    const league = Number(req.query.league ?? 39);
-    const season = Number(req.query.season ?? 2021);
-
-    const data = await apiGet("/players", { league, season, page: 1 });
+    // Le scraping se lance (ou récupère le cache)
+    const players = await scrapeTop5Leagues();
+    
     res.json({
-      league,
-      season,
-      page: 1,
-      results: data?.results ?? null,
-      responseCount: data?.response?.length ?? 0,
-      sample: (data?.response ?? []).slice(0, 2),
+      ok: true,
+      count: players.length,
+      rows: players
     });
   } catch (e) {
-    res.status(500).json({ error: String(e?.message ?? e) });
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Route spéciale pour le classement mondial
-app.get("/api/global-rankings", async (req, res) => {
-  try {
-    const season = req.query.season || 2023;
-    // Appel de la fonction unique qui gère l'array global
-    const rows = await import("./rankingService.js").then(m => m.getGlobalRankings(season));
-    res.json({ rows });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erreur serveur global" });
-  }
-});
+// Garder l'ancienne route ou la rediriger si besoin
+// app.get("/api/rankings", ...); 
 
 app.listen(PORT, () => {
   console.log(`Server running: http://localhost:${PORT}`);
